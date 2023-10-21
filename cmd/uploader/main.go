@@ -20,14 +20,16 @@ var (
 func init() {
 	awsConfig, err := configs.GetConfig(".")
 
+	fmt.Print(awsConfig)
+
 	if err != nil {
 		panic(err)
 	}
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"),
 		Credentials: credentials.NewStaticCredentials(
-			awsConfig.Credentials,
-			awsConfig.Password,
+			awsConfig.AcessKey,
+			awsConfig.SecretKey,
 			"",
 		),
 	})
@@ -40,34 +42,44 @@ func init() {
 	s3Bucket = awsConfig.Bucket
 }
 
+func uploads3(filename, shortname string) error {
+	f, err := os.Open(filename)
+
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+	_, err = s3Client.PutObject(&s3.PutObjectInput{
+		Bucket: aws.String(s3Bucket),
+		Key:    aws.String(shortname),
+		Body:   f,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Subiu arquivo %s\n", shortname)
+	return nil
+}
+
 func sendFile(file <-chan string) {
 	for filename := range file {
-		completeFileName := fmt.Sprintf("./tmp/%s", filename)
-		f, err := os.Open(completeFileName)
-		defer f.Close()
+		completeFileName := fmt.Sprintf("../../tmp/%s", filename)
+
+		err := uploads3(completeFileName, filename)
 
 		if err != nil {
 			fileErrors = append(fileErrors, filename)
 			fmt.Printf("Erro ao abrir arquivo %s\n", filename)
-			continue
 		}
 
-		fmt.Printf("Arquivo aberto %s\n", filename)
-
-		_, err := s3Client.PutObject(&s3.PutObjectInput{
-			Bucket: aws.String(s3Bucket),
-			Key:    aws.String(filename),
-			Body:   f,
-		})
-
-		if err != nil {
-			fileErrors = append(fileErrors, filename)
-		}
 	}
 }
 
 func getFiles(fileChan chan<- string) {
-	files, err := os.ReadDir("./tmp")
+	files, err := os.ReadDir("../../tmp")
 	if err != nil {
 		panic(err)
 	}
